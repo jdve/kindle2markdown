@@ -1,0 +1,9 @@
+# <%= @book.title %>
+by <%= @book.author.empty? ? SINGULAR[:AUTHOR_NA] : @book.author %>
+
+#book
+
+<% for entry in regular_entries -%>
+> <%= "_Note:_ " if entry.type == Entry::TYPE[:note] %><%= entry.text %> (<%= place(entry) %>)
+
+<% end -%>

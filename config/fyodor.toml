@@ -1,0 +1,14 @@
+# Fyodor's default config.
+
+# Set the translations you get on your clippings file.
+[parser]
+highlight = "Your Highlight"
+note = "Your Note"
+bookmark = "Your Bookmark"
+clip = "Clip This Article"
+loc = "Location"
+page = "page"
+time = "Added on"
+
+[output]
+filename = "%{title}.md"

@@ -1,0 +1,105 @@
+#!/usr/bin/env ruby
+
+require "fyodor/clippings_parser"
+require "fyodor/config_getter"
+require "fyodor/library"
+require "fyodor/output_writer"
+require "fyodor/stats_printer"
+require "io/console"
+require "kindle_highlights"
+require "optimist"
+
+module Kindle2Markdown
+  class ConfigGetter < Fyodor::ConfigGetter
+    def config_dir
+      @config_dir ||= Pathname.new(__dir__) + "../config"
+    end
+  end
+
+  class CLI
+    def main
+      parse_args
+      import
+      write_output
+    end
+
+    private
+
+    def parse_args
+      @cli_opts = Optimist::options do
+        synopsis "Usage: kindle2markdown [options]"
+
+        opt :clippings, "Path to 'My Clippings.txt' file retrieved from Kindle device", :type => :string
+        opt :email, "Email address for Amazon account", :type => :string
+        opt :outdir, "Output directory", :type => :string, :default => "./out"
+      end
+    end
+
+    def import
+      @config = ConfigGetter.new.config
+      @library = Fyodor::Library.new
+
+      if @cli_opts.clippings and @cli_opts.email
+        puts "Using both file and web sources"
+      elsif @cli_opts.clippings
+        puts "Using only the file source"
+      elsif @cli_opts.email
+        puts "Using only the web source"
+      else
+        puts "Provide clippings file path (-c) and/or Amazon login email (-e)"
+        exit
+      end
+
+      if @cli_opts.clippings
+        Fyodor::ClippingsParser.new(@cli_opts.clippings, @config["parser"]).parse(@library)
+      end
+
+      if @cli_opts.email
+        password = IO.console.getpass 'Enter password: '
+
+        kindle = KindleHighlights::Client.new(
+          email_address: @cli_opts.email,
+          password: password
+        )
+
+        if kindle.books.empty?
+          puts "Failed to download highlights from Amazon. Check your login information and try again."
+          exit
+        end
+
+        kindle.books.each do |book|
+          highlights = kindle.highlights_for(book.asin)
+
+          highlights.each do |highlight|
+            @library << Fyodor::Entry.new({
+              book_title: book.title,
+              book_author: book.author,
+              text: highlight.text,
+              loc: highlight.location,
+              loc_start: highlight.location,
+              type: Fyodor::Entry::TYPE[:highlight],
+            })
+          end
+        end
+      end
+
+      Fyodor::StatsPrinter.new(@library).print
+    end
+
+    def write_output
+      return if @library.empty?
+
+      outdir = Pathname.new(@cli_opts.outdir)
+
+      puts "\nWriting to #{outdir}..."
+
+      outdir.mkpath unless outdir.exist?
+
+      @library.each do |book|
+        Fyodor::OutputWriter.new(book, outdir, @config["output"]).write
+      end
+    end
+  end
+end
+
+Kindle2Markdown::CLI.new.main
